@@ -34,7 +34,7 @@ remDupᵐ ∈? xs = foldr (λ e res → if isYes (∈? (proj₁ e) (map proj₁ 
                                  then res else e ∷ res) [] xs
 
 remDupCorrectᵐ : {X Y : Set} → (∈?M : DecIn X) → (xs : List (X × Y)) → NoDup (map proj₁ (remDupᵐ ∈?M xs))
-remDupCorrectᵐ ∈?M (x ∷ xs) x₁ x₂  with ∈?M (proj₁ x) (map proj₁ (remDupᵐ ∈?M xs))
+remDupCorrectᵐ ∈?M (x ∷ xs) x₁ x₂ with ∈?M (proj₁ x) (map proj₁ (remDupᵐ ∈?M xs))
 ... | yes p with remDupCorrectᵐ ∈?M xs x₁ x₂
 ... | o1 , o2 , o3 , o4 , o5 = o1 , o2 , o3 , o4 , o5
 remDupCorrectᵐ ∈?M (x ∷ xs) x₁ (here refl) | no ¬p = [] , (_ , (_≡_.refl , (λ ()) , ¬p))
@@ -97,6 +97,8 @@ dup∈ : {X Y : Set} → (∈? : DecIn X) → (x : (X × Y)) → (xs : List (X �
 dup∈ ∈? x xs x₁ x₂ = dup∈ʳ ∈? x xs [] x₁ x₂
 
 
+
+
 ∉-join : {X : Set} → {xs₁ xs₂ : List X} → {x : X}
  → (x ∉ xs₁) × (x ∉ xs₂)
  →  x ∉ (xs₁ ++ xs₂)
@@ -149,6 +151,9 @@ infix 5 _∈ᵐ_
 _∈ᵐ_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (K × V) → FiniteMap K V eq eq' → Set
 a ∈ᵐ m = a ∈ (listOfᵐ m)
 
+_∈ᵖᵐ_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (K × V) → FiniteMap K V eq eq' → Set
+a ∈ᵖᵐ m = proj₁ a ∈ map proj₁ (listOfᵐ m)
+
 _∉ᵖᵐ_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (K × V) → FiniteMap K V eq eq' → Set
 a ∉ᵖᵐ m = proj₁ a ∉ map proj₁ (listOfᵐ m)
 
@@ -158,12 +163,35 @@ eqDec eq eq' = ≡-dec (_≟_ {{eq}}) (_≟_ {{eq'}})
 eq2inᵖ : {K V : Set} → (eq : DecEq K) → (eq' : DecEq V) → DecIn (K × V)
 eq2inᵖ eq eq' = eq2in (≡-dec (_≟_ {{eq}}) (_≟_ {{eq'}}))
 
-_∈M?_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (a : (K × V)) → (m : FiniteMap K V eq eq') → Dec (a ∈ᵐ m)
-_∈M?_ {k} {v} {eq} {eq'} a s = eq2inᵖ eq eq' a (listOfᵐ s)
+_∈ᵐ?_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (a : (K × V)) → (m : FiniteMap K V eq eq') → Dec (a ∈ᵐ m)
+_∈ᵐ?_ {k} {v} {eq} {eq'} a s = eq2inᵖ eq eq' a (listOfᵐ s)
+
+_∈ᵐᵖ?_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → (a : (K × V)) → (m : FiniteMap K V eq eq') → Dec ((proj₁ a) ∈ map proj₁ (listOfᵐ m))
+_∈ᵐᵖ?_ {k} {v} {eq} {eq'} a s = (eq2in (_≟_ {{eq}})) (proj₁ a) (map proj₁ (listOfᵐ s))
 
 infix 4 _≡ᵐ_
 _≡ᵐ_ : {K V : Set}{eq : DecEq K}{eq' : DecEq V} → FiniteMap K V eq eq' → FiniteMap K V eq eq' → Set
 s ≡ᵐ s' = ∀ a → a ∈ᵐ s ⇔ a ∈ᵐ s'
+
+getValue : {K V : Set} → (k : K) → (xs : List (K × V)) → k ∈ (map proj₁ xs) → V
+getValue k ((.k , v) ∷ xs) (here refl) = v
+getValue k ((fst₁ , snd₁) ∷ xs) (there x) = getValue k xs x
+
+getPair : {K V : Set} → (k : K) → (xs : List (K × V)) → (p : k ∈ (map proj₁ xs)) → (k , (getValue k xs p)) ∈ xs
+getPair k ((.k , snd₁) ∷ xs) (here refl) = here refl
+getPair k ((fst₁ , snd₁) ∷ xs) (there p) = there (getPair k xs p)
+
+NoDupProjUnique : {K V : Set} → (k : K) → (v v₁ : V)
+                              → (els : List (K × V)) → (k , v) ∈ els
+                              → NoDupInd (map proj₁ els)
+                              → ¬ v ≡ v₁
+                              → (k , v₁) ∉ els
+NoDupProjUnique k v .v .((k , v) ∷ _) (here refl) h₁ h₂ (here refl) = ⊥-elim (h₂ refl)
+NoDupProjUnique k v v₁ .((k , v) ∷ _) (here refl) h₁ h₂ (there h₃) = ⊥-elim (All¬⇒¬Any (headPair h₁)
+                  (∃-after-map (k , v₁) _ proj₁ h₃))
+NoDupProjUnique k v v₁ (.(k , v₁) ∷ xs) (there h) h₁ h₂ (here refl) = ⊥-elim (All¬⇒¬Any (headPair h₁)
+                                               (∃-after-map (k , v) xs proj₁ h))
+NoDupProjUnique k v v₁ (x ∷ xs) (there h) (hx :: hs) h₂ (there h₃) = NoDupProjUnique k v v₁ xs h hs h₂ h₃
 
 NoDupIndCons : {X : Set} → (xs : List X) → (x : X) → (x ∉ xs) → NoDupInd xs → NoDupInd (x ∷ xs)
 NoDupIndCons xs x x₁ x₂ = ¬Any⇒All¬ xs x₁ :: x₂
